@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: '{"default": "uat-backend-hc-config"}'
+  name: uat-icp-2-svc
+  namespace: uat-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: uat-icp-2-app
+  ports:
+  - name: https
+    protocol: TCP
+    port: 443
+    targetPort: 443
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: uat-icp-2-app
+  namespace: uat-backend
+  labels:
+    app: uat-icp-2-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: uat-icp-2-app
+  template:
+    metadata:
+      labels:
+        app: uat-icp-2-app
+    spec:
+      containers:
+        - name: uat-icp-2-app
+          image: gcr.io/bankopen-uat/uat-icp-2-k8:latest
+          imagePullPolicy: IfNotPresent
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/sh", "-c", "chmod -R 777 /var/www/uat-icp/public; chmod -R 777 /var/www/uat-icp/bootstrap; chmod -R 777 /var/www/uat-icp/storage/"]
+          ports:
+            - containerPort: 443
+          readinessProbe:
+            httpGet:
+              path: /health-check
+              port: 443
+            initialDelaySeconds: 20
+            timeoutSeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health-check
+              port: 443
+            initialDelaySeconds: 120
+            failureThreshold: 6
+            periodSeconds: 10
+          volumeMounts:
+          - name: persistent-storage
+            mountPath: /var/www/uat-icp/storage/logs
+            subPath: uat-icp-2
+      volumes:
+      - name: persistent-storage
+        persistentVolumeClaim:
+          claimName: uat-backend-pvc
+
